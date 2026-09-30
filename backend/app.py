@@ -1,7 +1,7 @@
 import os
 from datetime import date
 from flask import Flask, send_from_directory, jsonify, session, redirect, url_for, request
-from config import Config
+from backend.config import Config
 from database import execute_query, get_system_settings
 from routes.auth import auth_bp, login_required
 from routes.books import books_bp
