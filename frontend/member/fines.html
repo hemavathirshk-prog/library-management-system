@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fine Details - College Library</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+    <header class="navbar">
+        <div class="nav-brand">
+            <a href="/member/dashboard">College Library</a>
+        </div>
+        <nav class="nav-links">
+            <a href="/member/dashboard">Dashboard</a>
+            <a href="/member/books">Search &amp; Borrow</a>
+            <a href="/member/loans">My Borrowed Books</a>
+            <a href="/member/history">Borrowing History</a>
+            <a href="/member/fines" class="active">Fine Details</a>
+        </nav>
+        <div class="nav-user">
+            <span id="nav-user-name" class="user-badge">Member</span>
+            <button class="btn btn-outline btn-sm" onclick="handleLogout()" style="color: #ffffff; border-color: rgba(255,255,255,0.4);">Logout</button>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="card-header" style="margin-bottom: 1.5rem;">
+            <div>
+                <h1>Library Fine Details</h1>
+                <p>Track your overdue fees and payment history.</p>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card alert-top">
+                <div class="stat-title">Total Unpaid Fines</div>
+                <div class="stat-value" id="total-unpaid" style="color: var(--danger);">₹0.00</div>
+            </div>
+            <div class="stat-card success-top">
+                <div class="stat-title">Total Fines Settled</div>
+                <div class="stat-value" id="total-paid" style="color: var(--success);">₹0.00</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-title">Standard Fine Rate</div>
+                <div class="stat-value" id="fine-rate" style="font-size: 1.5rem; color: var(--primary);">₹5.00 / day</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Fines Breakdown</h2>
+            </div>
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Book Title</th>
+                            <th>ISBN</th>
+                            <th>Issue Date</th>
+                            <th>Due Date</th>
+                            <th>Return Date</th>
+                            <th>Fine Amount (₹)</th>
+                            <th>Payment Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="fines-tbody">
+                        <tr>
+                            <td colspan="7" style="text-align: center;">Loading fine records...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.5rem;">
+                * Note: Outstanding fines can be paid at the main library circulation counter to the librarian.
+            </p>
+        </div>
+    </main>
+
+    <footer>
+        <p>College Library Management System &copy; 2026</p>
+    </footer>
+
+    <script src="/js/api.js"></script>
+    <script>
+        async function initFines() {
+            const user = await checkAuth('member');
+            if (!user) return;
+
+            const res = await apiCall('/api/fines/member');
+            const tbody = document.getElementById('fines-tbody');
+
+            if (!res.ok) {
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--danger);">Failed to load fine records.</td></tr>`;
+                return;
+            }
+
+            const data = res.data;
+            document.getElementById('total-unpaid').innerText = formatCurrency(data.total_unpaid);
+            document.getElementById('total-paid').innerText = formatCurrency(data.total_paid);
+            document.getElementById('fine-rate').innerText = `${formatCurrency(data.fine_per_day)} / day`;
+
+            if (!data.fines || data.fines.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">Good news! You have no recorded library fines.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = data.fines.map(f => {
+                const badge = f.fine_paid
+                    ? `<span class="badge badge-success">Paid</span>`
+                    : `<span class="badge badge-danger">Unpaid</span>`;
+
+                return `
+                    <tr>
+                        <td><strong>${f.book_title}</strong></td>
+                        <td><code>${f.isbn}</code></td>
+                        <td>${f.issue_date}</td>
+                        <td>${f.due_date}</td>
+                        <td>${f.return_date}</td>
+                        <td><strong>${formatCurrency(f.fine_amount)}</strong></td>
+                        <td>${badge}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        initFines();
+    </script>
+</body>
+</html>

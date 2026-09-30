@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Borrowing History - College Library</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+    <header class="navbar">
+        <div class="nav-brand">
+            <a href="/member/dashboard">College Library</a>
+        </div>
+        <nav class="nav-links">
+            <a href="/member/dashboard">Dashboard</a>
+            <a href="/member/books">Search &amp; Borrow</a>
+            <a href="/member/loans">My Borrowed Books</a>
+            <a href="/member/history" class="active">Borrowing History</a>
+            <a href="/member/fines">Fine Details</a>
+        </nav>
+        <div class="nav-user">
+            <span id="nav-user-name" class="user-badge">Member</span>
+            <button class="btn btn-outline btn-sm" onclick="handleLogout()" style="color: #ffffff; border-color: rgba(255,255,255,0.4);">Logout</button>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="card-header" style="margin-bottom: 1.5rem;">
+            <div>
+                <h1>Borrowing History</h1>
+                <p>Complete record of all library books you have borrowed and returned.</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Book Title</th>
+                            <th>Author</th>
+                            <th>Category</th>
+                            <th>ISBN</th>
+                            <th>Issue Date</th>
+                            <th>Due Date</th>
+                            <th>Return Date</th>
+                            <th>Fine Incurred (₹)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-tbody">
+                        <tr>
+                            <td colspan="8" style="text-align: center;">Loading your history...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <p>College Library Management System &copy; 2026</p>
+    </footer>
+
+    <script src="/js/api.js"></script>
+    <script>
+        async function initHistory() {
+            const user = await checkAuth('member');
+            if (!user) return;
+
+            const res = await apiCall('/api/loans/history');
+            const tbody = document.getElementById('history-tbody');
+
+            if (!res.ok || !res.data.history || res.data.history.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2rem;">No past borrowing history records found.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = res.data.history.map(item => {
+                const fineBadge = item.fine_amount > 0
+                    ? `<span class="badge ${item.fine_paid ? 'badge-info' : 'badge-danger'}">${formatCurrency(item.fine_amount)} (${item.fine_paid ? 'Paid' : 'Unpaid'})</span>`
+                    : `<span class="badge badge-success">${formatCurrency(0)}</span>`;
+
+                return `
+                    <tr>
+                        <td><strong>${item.title}</strong></td>
+                        <td>${item.author}</td>
+                        <td>${item.category}</td>
+                        <td><code>${item.isbn}</code></td>
+                        <td>${item.issue_date}</td>
+                        <td>${item.due_date}</td>
+                        <td><strong>${item.return_date}</strong></td>
+                        <td>${fineBadge}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        initHistory();
+    </script>
+</body>
+</html>

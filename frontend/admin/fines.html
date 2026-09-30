@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fines Management - College Library Admin</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+    <header class="navbar">
+        <div class="nav-brand">
+            <a href="/admin/dashboard">College Library [Admin Panel]</a>
+        </div>
+        <nav class="nav-links">
+            <a href="/admin/dashboard">Dashboard</a>
+            <a href="/admin/books">Books</a>
+            <a href="/admin/members">Members</a>
+            <a href="/admin/issue">Issue Book</a>
+            <a href="/admin/returns">Returns</a>
+            <a href="/admin/fines" class="active">Fines</a>
+            <a href="/admin/transactions">Transactions</a>
+        </nav>
+        <div class="nav-user">
+            <span id="nav-user-name" class="user-badge">Administrator</span>
+            <button class="btn btn-outline btn-sm" onclick="handleLogout()" style="color: #ffffff; border-color: rgba(255,255,255,0.4);">Logout</button>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="card-header" style="margin-bottom: 1.5rem;">
+            <div>
+                <h1>Library Fines Management</h1>
+                <p>Track student overdue balances, collect penalties, and record payment receipts.</p>
+            </div>
+        </div>
+
+        <div id="fines-alert" class="alert" style="display: none;"></div>
+
+        <!-- Summary Stats -->
+        <div class="stats-grid">
+            <div class="stat-card alert-top">
+                <div class="stat-title">Total Pending Fines</div>
+                <div class="stat-value" id="total-pending" style="color: var(--danger);">₹0.00</div>
+            </div>
+            <div class="stat-card success-top">
+                <div class="stat-title">Total Fines Collected</div>
+                <div class="stat-value" id="total-collected" style="color: var(--success);">₹0.00</div>
+            </div>
+        </div>
+
+        <!-- Fines Table -->
+        <div class="card">
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Loan ID</th>
+                            <th>Member</th>
+                            <th>Book Title</th>
+                            <th>Issue Date</th>
+                            <th>Due Date</th>
+                            <th>Return Date</th>
+                            <th>Fine Amount (₹)</th>
+                            <th>Payment Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="fines-tbody">
+                        <tr>
+                            <td colspan="9" style="text-align: center;">Loading fine records...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <p>College Library Management System &copy; 2026</p>
+    </footer>
+
+    <script src="/js/api.js"></script>
+    <script>
+        async function initFinesPage() {
+            const admin = await checkAuth('admin');
+            if (!admin) return;
+
+            loadFines();
+        }
+
+        async function loadFines() {
+            const res = await apiCall('/api/fines/all');
+            const tbody = document.getElementById('fines-tbody');
+
+            if (!res.ok) {
+                tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--danger);">Failed to load fines.</td></tr>`;
+                return;
+            }
+
+            const data = res.data;
+            document.getElementById('total-pending').innerText = formatCurrency(data.total_unpaid);
+            document.getElementById('total-collected').innerText = formatCurrency(data.total_collected);
+
+            if (!data.fines || data.fines.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 2rem;">No library fines recorded in the system.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = data.fines.map(f => {
+                const badge = f.fine_paid
+                    ? `<span class="badge badge-success">Paid</span>`
+                    : `<span class="badge badge-danger">Unpaid</span>`;
+
+                const actionBtn = f.fine_paid
+                    ? `<button class="btn btn-outline btn-sm" disabled style="opacity: 0.6; cursor: not-allowed;">Paid</button>`
+                    : `<button class="btn btn-success btn-sm" onclick="markPaid(${f.loan_id})">Mark as Paid</button>`;
+
+                return `
+                    <tr>
+                        <td>#${f.loan_id}</td>
+                        <td><strong>${f.member_name}</strong> (<code>${f.member_username}</code>)</td>
+                        <td>${f.book_title}</td>
+                        <td>${f.issue_date}</td>
+                        <td>${f.due_date}</td>
+                        <td>${f.return_date}</td>
+                        <td><strong>${formatCurrency(f.fine_amount)}</strong></td>
+                        <td>${badge}</td>
+                        <td>${actionBtn}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function markPaid(loanId) {
+            hideAlert('fines-alert');
+            const res = await apiCall(`/api/fines/pay/${loanId}`, 'POST');
+            if (!res.ok) {
+                showAlert('fines-alert', res.data.error || 'Failed to update fine.', 'danger');
+                return;
+            }
+
+            showAlert('fines-alert', 'Fine marked as paid successfully.', 'success');
+            // Refresh table without page reload
+            loadFines();
+        }
+
+        initFinesPage();
+    </script>
+</body>
+</html>

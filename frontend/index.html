@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>College Library Management System</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+    <!-- Top Navigation -->
+    <header class="navbar">
+        <div class="nav-brand">
+            <a href="/">College Library</a>
+        </div>
+        <nav class="nav-links">
+            <a href="/" class="active">Home</a>
+            <a href="/login">Login</a>
+            <a href="/register">Member Registration</a>
+        </nav>
+    </header>
+
+    <main class="container">
+        <!-- Welcome Card -->
+        <section class="card">
+            <h1>Welcome to the College Library Management System</h1>
+            <p>Search books in our catalog, borrow copies, renew loans, and track return dates and library fines.</p>
+            <div style="margin-top: 1rem; display: flex; gap: 0.75rem;">
+                <a href="/login" class="btn btn-primary">Login to Your Account</a>
+                <a href="/register" class="btn btn-outline">New Member Registration</a>
+            </div>
+        </section>
+
+        <!-- Demo Credentials Reference -->
+        <section class="card" style="background-color: #f1f5f9; border-left: 4px solid var(--primary-light);">
+            <h3 style="margin-bottom: 0.25rem;">Demo Credentials</h3>
+            <p style="margin-bottom: 0.5rem; font-size: 0.9rem;">Use these pre-configured credentials to evaluate the system:</p>
+            <div style="display: flex; gap: 2rem; flex-wrap: wrap; font-size: 0.9rem;">
+                <div>
+                    <strong>Administrator:</strong><br>
+                    Username: <code>admin</code><br>
+                    Password: <code>admin123</code>
+                </div>
+                <div>
+                    <strong>Student Member:</strong><br>
+                    Username: <code>member1</code><br>
+                    Password: <code>member123</code>
+                </div>
+            </div>
+        </section>
+
+        <!-- Book Catalog Search -->
+        <section class="card">
+            <div class="card-header">
+                <h2 class="card-title">Library Book Catalog</h2>
+                <span id="book-count" style="font-size: 0.9rem; color: var(--text-muted);">Loading books...</span>
+            </div>
+
+            <div class="search-bar">
+                <input type="text" id="search-input" placeholder="Search by book title, author, or ISBN...">
+                <select id="category-filter" onchange="loadBooks()">
+                    <option value="all">All Categories</option>
+                </select>
+                <select id="status-filter" onchange="loadBooks()">
+                    <option value="all">All Statuses</option>
+                    <option value="Available">Available Only</option>
+                    <option value="Unavailable">Unavailable Only</option>
+                </select>
+                <button class="btn btn-primary" onclick="loadBooks()">Search</button>
+                <button class="btn btn-outline" onclick="resetFilters()">Reset</button>
+            </div>
+
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Book Title</th>
+                            <th>Author</th>
+                            <th>Category</th>
+                            <th>ISBN</th>
+                            <th>Total Copies</th>
+                            <th>Available Copies</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="books-tbody">
+                        <tr>
+                            <td colspan="7" style="text-align: center;">Loading catalog...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>College Library Management System &copy; 2026. Built with Python Flask & MySQL.</p>
+    </footer>
+
+    <script src="/js/api.js"></script>
+    <script>
+        async function loadCategories() {
+            const res = await apiCall('/api/books/categories');
+            if (res.ok && res.data.categories) {
+                const select = document.getElementById('category-filter');
+                res.data.categories.forEach(cat => {
+                    const opt = document.createElement('option');
+                    opt.value = cat;
+                    opt.innerText = cat;
+                    select.appendChild(opt);
+                });
+            }
+        }
+
+        async function loadBooks() {
+            const search = document.getElementById('search-input').value.trim();
+            const category = document.getElementById('category-filter').value;
+            const status = document.getElementById('status-filter').value;
+
+            let url = `/api/books?search=${encodeURIComponent(search)}&category=${encodeURIComponent(category)}&status=${encodeURIComponent(status)}`;
+            const res = await apiCall(url);
+            const tbody = document.getElementById('books-tbody');
+            const countEl = document.getElementById('book-count');
+
+            if (!res.ok || !res.data.books || res.data.books.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No books found matching your criteria.</td></tr>`;
+                countEl.innerText = '0 books found';
+                return;
+            }
+
+            const books = res.data.books;
+            countEl.innerText = `${books.length} book${books.length === 1 ? '' : 's'} found`;
+
+            tbody.innerHTML = books.map(book => {
+                const badgeClass = book.status === 'Available' ? 'badge-success' : 'badge-danger';
+                return `
+                    <tr>
+                        <td><strong>${book.title}</strong></td>
+                        <td>${book.author}</td>
+                        <td>${book.category}</td>
+                        <td><code>${book.isbn}</code></td>
+                        <td>${book.quantity}</td>
+                        <td><strong>${book.available_quantity}</strong></td>
+                        <td><span class="badge ${badgeClass}">${book.status}</span></td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function resetFilters() {
+            document.getElementById('search-input').value = '';
+            document.getElementById('category-filter').value = 'all';
+            document.getElementById('status-filter').value = 'all';
+            loadBooks();
+        }
+
+        document.getElementById('search-input').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                loadBooks();
+            }
+        });
+
+        // Initial Load
+        loadCategories();
+        loadBooks();
+    </script>
+</body>
+</html>

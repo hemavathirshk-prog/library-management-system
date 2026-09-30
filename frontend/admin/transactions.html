@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transaction Records - College Library Admin</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+    <header class="navbar">
+        <div class="nav-brand">
+            <a href="/admin/dashboard">College Library [Admin Panel]</a>
+        </div>
+        <nav class="nav-links">
+            <a href="/admin/dashboard">Dashboard</a>
+            <a href="/admin/books">Books</a>
+            <a href="/admin/members">Members</a>
+            <a href="/admin/issue">Issue Book</a>
+            <a href="/admin/returns">Returns</a>
+            <a href="/admin/fines">Fines</a>
+            <a href="/admin/transactions" class="active">Transactions</a>
+        </nav>
+        <div class="nav-user">
+            <span id="nav-user-name" class="user-badge">Administrator</span>
+            <button class="btn btn-outline btn-sm" onclick="handleLogout()" style="color: #ffffff; border-color: rgba(255,255,255,0.4);">Logout</button>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="card-header" style="margin-bottom: 1.5rem;">
+            <div>
+                <h1>Library Transaction Audit Log</h1>
+                <p>Complete historical log of all book issuances, due dates, returns, and penalty fees.</p>
+            </div>
+            <div>
+                <a href="/admin/issue" class="btn btn-primary">+ Issue New Book</a>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="search-bar">
+                <input type="text" id="tx-search" placeholder="Search by member name, username, book title, or ISBN...">
+                <select id="status-filter" onchange="loadTransactions()">
+                    <option value="all">All Transactions</option>
+                    <option value="Issued">Currently Issued</option>
+                    <option value="Returned">Returned Books</option>
+                </select>
+                <button class="btn btn-primary" onclick="loadTransactions()">Filter</button>
+                <button class="btn btn-outline" onclick="resetTxSearch()">Reset</button>
+            </div>
+
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Loan ID</th>
+                            <th>Member</th>
+                            <th>Book Title</th>
+                            <th>ISBN</th>
+                            <th>Issue Date</th>
+                            <th>Due Date</th>
+                            <th>Return Date</th>
+                            <th>Status</th>
+                            <th>Fine Amount (₹)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tx-tbody">
+                        <tr>
+                            <td colspan="9" style="text-align: center;">Loading transaction records...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <p>College Library Management System &copy; 2026</p>
+    </footer>
+
+    <script src="/js/api.js"></script>
+    <script>
+        async function initTransactionsPage() {
+            const admin = await checkAuth('admin');
+            if (!admin) return;
+
+            // Attach event listener so dropdown immediately triggers reload
+            const filterDropdown = document.getElementById('status-filter');
+            if (filterDropdown) {
+                filterDropdown.addEventListener('change', loadTransactions);
+            }
+
+            loadTransactions();
+        }
+
+        async function loadTransactions() {
+            const search = document.getElementById('tx-search').value.trim();
+            const status = document.getElementById('status-filter').value;
+            const tbody = document.getElementById('tx-tbody');
+
+            // Clear table before re-rendering
+            tbody.innerHTML = `<tr><td colspan="9" style="text-align: center;">Loading transaction records...</td></tr>`;
+
+            const res = await apiCall(`/api/loans/all?status=${encodeURIComponent(status)}&search=${encodeURIComponent(search)}`);
+
+            if (!res.ok || !res.data.transactions || res.data.transactions.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 2rem;">No transactions found.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = res.data.transactions.map(t => {
+                let statusBadge = '';
+                if (t.status === 'Issued') {
+                    statusBadge = t.is_overdue
+                        ? `<span class="badge badge-danger">Issued (Overdue)</span>`
+                        : `<span class="badge badge-warning">Issued (Active)</span>`;
+                } else {
+                    statusBadge = `<span class="badge badge-success">Returned</span>`;
+                }
+
+                const fineDisplay = t.fine_amount > 0
+                    ? `<span style="color: var(--danger); font-weight: bold;">${formatCurrency(t.fine_amount)} (${t.fine_paid ? 'Paid' : 'Unpaid'})</span>`
+                    : formatCurrency(0);
+
+                return `
+                    <tr>
+                        <td>#${t.loan_id}</td>
+                        <td><strong>${t.member_name}</strong><br><small style="color:var(--text-muted);">@${t.member_username}</small></td>
+                        <td><strong>${t.book_title}</strong></td>
+                        <td><code>${t.isbn}</code></td>
+                        <td>${t.issue_date}</td>
+                        <td>${t.due_date}</td>
+                        <td>${t.return_date || '<span style="color:var(--text-muted);">Active</span>'}</td>
+                        <td>${statusBadge}</td>
+                        <td>${fineDisplay}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function resetTxSearch() {
+            document.getElementById('tx-search').value = '';
+            document.getElementById('status-filter').value = 'all';
+            loadTransactions();
+        }
+
+        document.getElementById('tx-search').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') loadTransactions();
+        });
+
+        initTransactionsPage();
+    </script>
+</body>
+</html>

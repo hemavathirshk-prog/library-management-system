@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Members Management - College Library Admin</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+    <header class="navbar">
+        <div class="nav-brand">
+            <a href="/admin/dashboard">College Library [Admin Panel]</a>
+        </div>
+        <nav class="nav-links">
+            <a href="/admin/dashboard">Dashboard</a>
+            <a href="/admin/books">Books</a>
+            <a href="/admin/members" class="active">Members</a>
+            <a href="/admin/issue">Issue Book</a>
+            <a href="/admin/returns">Returns</a>
+            <a href="/admin/fines">Fines</a>
+            <a href="/admin/transactions">Transactions</a>
+        </nav>
+        <div class="nav-user">
+            <span id="nav-user-name" class="user-badge">Administrator</span>
+            <button class="btn btn-outline btn-sm" onclick="handleLogout()" style="color: #ffffff; border-color: rgba(255,255,255,0.4);">Logout</button>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="card-header" style="margin-bottom: 1.5rem;">
+            <div>
+                <h1>Registered Members Directory</h1>
+                <p>Monitor student and faculty accounts, active borrowings, and library fines.</p>
+            </div>
+            <div>
+                <button class="btn btn-primary" onclick="openAddMemberModal()">+ Add New Member</button>
+            </div>
+        </div>
+
+        <div id="members-alert" class="alert" style="display: none;"></div>
+
+        <!-- Search Bar -->
+        <div class="card">
+            <div class="search-bar">
+                <input type="text" id="member-search" placeholder="Search by name, username, email, or phone...">
+                <button class="btn btn-primary" onclick="loadMembers()">Search</button>
+                <button class="btn btn-outline" onclick="resetMemberSearch()">Reset</button>
+            </div>
+
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Full Name</th>
+                            <th>Username</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                            <th>Registered On</th>
+                            <th>Active Loans</th>
+                            <th>Unpaid Fines (₹)</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="members-tbody">
+                        <tr>
+                            <td colspan="9" style="text-align: center;">Loading members list...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- Add Member Modal -->
+    <div id="add-member-modal" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3>Add New Library Member</h3>
+                <button class="modal-close" onclick="closeAddMemberModal()">&times;</button>
+            </div>
+            <div id="member-modal-alert" class="alert" style="display: none;"></div>
+            <form id="add-member-form">
+                <div class="form-group">
+                    <label for="m-name">Full Name *</label>
+                    <input type="text" id="m-name" class="form-control" required placeholder="e.g. Alice Smith">
+                </div>
+                <div class="form-group">
+                    <label for="m-email">Email Address *</label>
+                    <input type="email" id="m-email" class="form-control" required placeholder="e.g. alice@college.edu">
+                </div>
+                <div class="form-group">
+                    <label for="m-phone">Phone Number *</label>
+                    <input type="tel" id="m-phone" class="form-control" required placeholder="e.g. 9876543210">
+                </div>
+                <div class="form-group">
+                    <label for="m-username">Username *</label>
+                    <input type="text" id="m-username" class="form-control" required placeholder="e.g. alice">
+                </div>
+                <div class="form-group">
+                    <label for="m-password">Password *</label>
+                    <input type="password" id="m-password" class="form-control" required placeholder="Minimum 6 characters">
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary">Create Member</button>
+                    <button type="button" class="btn btn-outline" onclick="closeAddMemberModal()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Member Details & Loans Modal -->
+    <div id="member-loans-modal" class="modal-overlay">
+        <div class="modal-box" style="max-width: 650px;">
+            <div class="modal-header">
+                <h3 id="details-modal-title">Member Borrowing History</h3>
+                <button class="modal-close" onclick="closeLoansModal()">&times;</button>
+            </div>
+            <div id="member-loans-content">
+                <p>Loading records...</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="closeLoansModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>College Library Management System &copy; 2026</p>
+    </footer>
+
+    <script src="/js/api.js"></script>
+    <script>
+        async function initMembersPage() {
+            const admin = await checkAuth('admin');
+            if (!admin) return;
+
+            loadMembers();
+        }
+
+        async function loadMembers() {
+            const search = document.getElementById('member-search').value.trim();
+            const res = await apiCall(`/api/members?search=${encodeURIComponent(search)}`);
+            const tbody = document.getElementById('members-tbody');
+
+            if (!res.ok || !res.data.members || res.data.members.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 2rem;">No registered members found.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = res.data.members.map(m => {
+                const regDate = m.registration_date ? m.registration_date.split('T')[0] : 'N/A';
+                const fineBadge = m.unpaid_fines > 0
+                    ? `<span class="badge badge-danger">${formatCurrency(m.unpaid_fines)}</span>`
+                    : `<span class="badge badge-success">${formatCurrency(0)}</span>`;
+
+                return `
+                    <tr>
+                        <td>#${m.member_id}</td>
+                        <td><strong>${m.name}</strong></td>
+                        <td><code>${m.username}</code></td>
+                        <td>${m.email}</td>
+                        <td>${m.phone}</td>
+                        <td>${regDate}</td>
+                        <td><strong>${m.active_loans_count}</strong></td>
+                        <td>${fineBadge}</td>
+                        <td>
+                            <button class="btn btn-outline btn-sm" onclick="viewMemberHistory(${m.member_id}, '${m.name}')">View Loans</button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteMember(${m.member_id}, '${m.name}')" style="margin-left: 0.25rem;">Delete</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function resetMemberSearch() {
+            document.getElementById('member-search').value = '';
+            loadMembers();
+        }
+
+        function openAddMemberModal() {
+            hideAlert('member-modal-alert');
+            document.getElementById('add-member-form').reset();
+            document.getElementById('add-member-modal').classList.add('active');
+        }
+
+        function closeAddMemberModal() {
+            document.getElementById('add-member-modal').classList.remove('active');
+        }
+
+        document.getElementById('add-member-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            hideAlert('member-modal-alert');
+
+            const name = document.getElementById('m-name').value.trim();
+            const email = document.getElementById('m-email').value.trim();
+            const phone = document.getElementById('m-phone').value.trim();
+            const username = document.getElementById('m-username').value.trim();
+            const password = document.getElementById('m-password').value;
+
+            const res = await apiCall('/api/members', 'POST', { name, email, phone, username, password });
+            if (!res.ok) {
+                showAlert('member-modal-alert', res.data.error || 'Failed to add member.', 'danger');
+                return;
+            }
+
+            closeAddMemberModal();
+            showAlert('members-alert', res.data.message || 'Member added successfully.', 'success');
+            loadMembers();
+        });
+
+        async function viewMemberHistory(memberId, name) {
+            document.getElementById('details-modal-title').innerText = `Borrowing Records: ${name}`;
+            document.getElementById('member-loans-content').innerHTML = '<p>Loading records...</p>';
+            document.getElementById('member-loans-modal').classList.add('active');
+
+            const res = await apiCall(`/api/members/${memberId}`);
+            if (!res.ok) {
+                document.getElementById('member-loans-content').innerHTML = `<p class="alert alert-danger">${res.data.error || 'Failed to load member records.'}</p>`;
+                return;
+            }
+
+            const loans = res.data.loans;
+            if (!loans || loans.length === 0) {
+                document.getElementById('member-loans-content').innerHTML = '<p style="color: var(--text-muted);">No loan records on file for this member.</p>';
+                return;
+            }
+
+            let html = `
+                <table style="width: 100%; font-size: 0.85rem;">
+                    <thead>
+                        <tr>
+                            <th>Book Title</th>
+                            <th>Issue Date</th>
+                            <th>Due Date</th>
+                            <th>Status</th>
+                            <th>Fine (₹)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            loans.forEach(l => {
+                const statusBadge = l.status === 'Issued' 
+                    ? `<span class="badge badge-warning">Active Loan</span>` 
+                    : `<span class="badge badge-success">Returned</span>`;
+                html += `
+                    <tr>
+                        <td><strong>${l.title}</strong></td>
+                        <td>${l.issue_date}</td>
+                        <td>${l.due_date}</td>
+                        <td>${statusBadge}</td>
+                        <td>${formatCurrency(l.fine_amount)}</td>
+                    </tr>
+                `;
+            });
+            html += `</tbody></table>`;
+            document.getElementById('member-loans-content').innerHTML = html;
+        }
+
+        function closeLoansModal() {
+            document.getElementById('member-loans-modal').classList.remove('active');
+        }
+
+        async function deleteMember(memberId, name) {
+            if (!confirm(`Are you sure you want to delete member "${name}"?`)) {
+                return;
+            }
+
+            hideAlert('members-alert');
+            const res = await apiCall(`/api/members/${memberId}`, 'DELETE');
+            if (!res.ok) {
+                showAlert('members-alert', res.data.error || 'Failed to delete member.', 'danger');
+                return;
+            }
+
+            showAlert('members-alert', res.data.message || 'Member deleted successfully.', 'success');
+            loadMembers();
+        }
+
+        document.getElementById('member-search').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') loadMembers();
+        });
+
+        initMembersPage();
+    </script>
+</body>
+</html>

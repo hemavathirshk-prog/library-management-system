@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Member Dashboard - College Library</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+    <!-- Member Navigation Bar -->
+    <header class="navbar">
+        <div class="nav-brand">
+            <a href="/member/dashboard">College Library</a>
+        </div>
+        <nav class="nav-links">
+            <a href="/member/dashboard" class="active">Dashboard</a>
+            <a href="/member/books">Search &amp; Borrow</a>
+            <a href="/member/loans">My Borrowed Books</a>
+            <a href="/member/history">Borrowing History</a>
+            <a href="/member/fines">Fine Details</a>
+        </nav>
+        <div class="nav-user">
+            <span id="nav-user-name" class="user-badge">Loading...</span>
+            <button class="btn btn-outline btn-sm" onclick="handleLogout()" style="color: #ffffff; border-color: rgba(255,255,255,0.4);">Logout</button>
+        </div>
+    </header>
+
+    <main class="container">
+        <div id="dashboard-alert" class="alert" style="display: none;"></div>
+
+        <!-- Greeting -->
+        <div class="card" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+            <div>
+                <h1 id="greeting">Welcome to Your Member Dashboard</h1>
+                <p style="margin-bottom: 0;">Here is an overview of your current borrowed books, upcoming due dates, and fines.</p>
+            </div>
+            <div>
+                <a href="/member/books" class="btn btn-primary">+ Borrow a Book</a>
+            </div>
+        </div>
+
+        <!-- Dashboard Stats Grid -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-title">Active Borrowed Books</div>
+                <div class="stat-value" id="stat-active">0</div>
+            </div>
+            <div class="stat-card alert-top">
+                <div class="stat-title">Overdue Books</div>
+                <div class="stat-value" id="stat-overdue" style="color: var(--danger);">0</div>
+            </div>
+            <div class="stat-card" id="card-fines">
+                <div class="stat-title">Unpaid Fines</div>
+                <div class="stat-value" id="stat-fines">₹0.00</div>
+            </div>
+            <div class="stat-card success-top">
+                <div class="stat-title">Books Read / Returned</div>
+                <div class="stat-value" id="stat-returned">0</div>
+            </div>
+        </div>
+
+        <!-- Library Policy Notice -->
+        <div class="card" style="background: #f8fafc; border-left: 4px solid var(--primary-light);">
+            <h3 style="margin-bottom: 0.25rem;">Current Library Rules</h3>
+            <p id="policy-info" style="font-size: 0.9rem; margin-bottom: 0;">
+                Loading library policies...
+            </p>
+        </div>
+
+        <!-- Currently Borrowed Books Table -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Currently Borrowed Books</h2>
+                <a href="/member/loans" class="btn btn-outline btn-sm">View All &amp; Manage</a>
+            </div>
+
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Book Title</th>
+                            <th>Author</th>
+                            <th>Issue Date</th>
+                            <th>Due Date</th>
+                            <th>Status</th>
+                            <th>Renewals</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="loans-tbody">
+                        <tr>
+                            <td colspan="7" style="text-align: center;">Loading your borrowed books...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- Return Details Modal -->
+    <div id="return-modal" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3>Book Return Summary</h3>
+                <button class="modal-close" onclick="closeReturnModal()">&times;</button>
+            </div>
+            <div id="return-modal-content" style="font-size: 0.95rem; line-height: 1.6;"></div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="closeReturnModal()">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>College Library Management System &copy; 2026</p>
+    </footer>
+
+    <script src="/js/api.js"></script>
+    <script>
+        let currentUser = null;
+
+        async function initDashboard() {
+            currentUser = await checkAuth('member');
+            if (!currentUser) return;
+
+            document.getElementById('greeting').innerText = `Welcome, ${currentUser.name}!`;
+
+            // Load Stats
+            const statsRes = await apiCall('/api/member/dashboard-stats');
+            if (statsRes.ok) {
+                const s = statsRes.data;
+                document.getElementById('stat-active').innerText = s.active_borrowed;
+                document.getElementById('stat-overdue').innerText = s.overdue_count;
+                document.getElementById('stat-fines').innerText = formatCurrency(s.unpaid_fines);
+                document.getElementById('stat-returned').innerText = s.books_read;
+
+                if (s.unpaid_fines > 0) {
+                    document.getElementById('card-fines').classList.add('alert-top');
+                    document.getElementById('stat-fines').style.color = 'var(--danger)';
+                }
+
+                if (s.settings) {
+                    document.getElementById('policy-info').innerHTML = `
+                        • Loan Period: <strong>${s.settings.loan_days} days</strong> &nbsp;|&nbsp; 
+                        • Overdue Fine: <strong>${formatCurrency(s.settings.fine_per_day)} per day</strong> &nbsp;|&nbsp; 
+                        • Max Renewals Allowed: <strong>${s.settings.max_renewals} times</strong>
+                    `;
+                }
+            }
+
+            // Load active loans
+            loadMyActiveLoans();
+        }
+
+        async function loadMyActiveLoans() {
+            const res = await apiCall('/api/loans/my-loans');
+            const tbody = document.getElementById('loans-tbody');
+
+            if (!res.ok || !res.data.loans || res.data.loans.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">You do not have any currently borrowed books.</td></tr>`;
+                return;
+            }
+
+            const loans = res.data.loans;
+            tbody.innerHTML = loans.map(l => {
+                const statusBadge = l.is_overdue
+                    ? `<span class="badge badge-danger">Overdue (${l.overdue_days}d - Fine: ${formatCurrency(l.current_fine)})</span>`
+                    : `<span class="badge badge-success">Active (Due: ${l.due_date})</span>`;
+
+                return `
+                    <tr>
+                        <td><strong>${l.title}</strong></td>
+                        <td>${l.author}</td>
+                        <td>${l.issue_date}</td>
+                        <td>${l.due_date}</td>
+                        <td>${statusBadge}</td>
+                        <td>${l.renewal_count}</td>
+                        <td>
+                            <button class="btn btn-outline btn-sm" onclick="renewBook(${l.loan_id})" title="Extend loan due date">Renew</button>
+                            <button class="btn btn-primary btn-sm" onclick="returnBook(${l.loan_id})" style="margin-left: 0.25rem;">Return</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function renewBook(loanId) {
+            hideAlert('dashboard-alert');
+            const res = await apiCall(`/api/loans/renew/${loanId}`, 'POST');
+            if (!res.ok) {
+                showAlert('dashboard-alert', res.data.error || 'Failed to renew book.', 'danger');
+                return;
+            }
+            showAlert('dashboard-alert', `${res.data.message} New due date: ${res.data.new_due_date}`, 'success');
+            initDashboard();
+        }
+
+        async function returnBook(loanId) {
+            hideAlert('dashboard-alert');
+            const res = await apiCall(`/api/loans/return/${loanId}`, 'POST');
+            if (!res.ok) {
+                showAlert('dashboard-alert', res.data.error || 'Failed to return book.', 'danger');
+                return;
+            }
+
+            // Display return breakdown modal
+            const d = res.data.details;
+            const content = `
+                <p><strong>Book:</strong> ${d.book_title}</p>
+                <p><strong>Due Date:</strong> ${d.due_date}</p>
+                <p><strong>Return Date:</strong> ${d.return_date}</p>
+                <p><strong>Overdue Days:</strong> ${d.overdue_days} day(s)</p>
+                <p><strong>Fine Amount:</strong> <span style="font-weight: bold; color: ${d.fine_amount > 0 ? 'var(--danger)' : 'var(--success)'};">${formatCurrency(d.fine_amount)}</span> (${d.fine_paid ? 'No Fine' : 'Unpaid'})</p>
+                <div class="alert alert-success" style="margin-top: 1rem;">${res.data.message}</div>
+            `;
+            document.getElementById('return-modal-content').innerHTML = content;
+            document.getElementById('return-modal').classList.add('active');
+
+            initDashboard();
+        }
+
+        function closeReturnModal() {
+            document.getElementById('return-modal').classList.remove('active');
+        }
+
+        // Initialize on load
+        initDashboard();
+    </script>
+</body>
+</html>

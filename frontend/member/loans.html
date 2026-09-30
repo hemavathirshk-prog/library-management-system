@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Borrowed Books - College Library</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+    <header class="navbar">
+        <div class="nav-brand">
+            <a href="/member/dashboard">College Library</a>
+        </div>
+        <nav class="nav-links">
+            <a href="/member/dashboard">Dashboard</a>
+            <a href="/member/books">Search &amp; Borrow</a>
+            <a href="/member/loans" class="active">My Borrowed Books</a>
+            <a href="/member/history">Borrowing History</a>
+            <a href="/member/fines">Fine Details</a>
+        </nav>
+        <div class="nav-user">
+            <span id="nav-user-name" class="user-badge">Member</span>
+            <button class="btn btn-outline btn-sm" onclick="handleLogout()" style="color: #ffffff; border-color: rgba(255,255,255,0.4);">Logout</button>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="card-header" style="margin-bottom: 1.5rem;">
+            <div>
+                <h1>My Borrowed Books</h1>
+                <p>Manage your active book loans, renew borrow periods, and initiate returns.</p>
+            </div>
+            <div>
+                <a href="/member/books" class="btn btn-primary">+ Borrow Another Book</a>
+            </div>
+        </div>
+
+        <div id="loans-alert" class="alert" style="display: none;"></div>
+
+        <div class="card">
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Book Title</th>
+                            <th>Author</th>
+                            <th>ISBN</th>
+                            <th>Issue Date</th>
+                            <th>Due Date</th>
+                            <th>Status / Fine (₹)</th>
+                            <th>Renewals</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="my-loans-tbody">
+                        <tr>
+                            <td colspan="8" style="text-align: center;">Loading borrowed books...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- Return Breakdown Modal -->
+    <div id="return-modal" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3>Return Summary &amp; Fine Calculation</h3>
+                <button class="modal-close" onclick="closeReturnModal()">&times;</button>
+            </div>
+            <div id="return-details-body" style="font-size: 0.95rem; line-height: 1.8;"></div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="closeReturnModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>College Library Management System &copy; 2026</p>
+    </footer>
+
+    <script src="/js/api.js"></script>
+    <script>
+        async function initLoansPage() {
+            const user = await checkAuth('member');
+            if (!user) return;
+
+            loadLoans();
+        }
+
+        async function loadLoans() {
+            const res = await apiCall('/api/loans/my-loans');
+            const tbody = document.getElementById('my-loans-tbody');
+
+            if (!res.ok || !res.data.loans || res.data.loans.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2rem;">You do not have any currently borrowed books. <a href="/member/books">Browse catalog</a> to borrow.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = res.data.loans.map(l => {
+                let statusBadge = '';
+                if (l.is_overdue) {
+                    statusBadge = `<span class="badge badge-danger">Overdue by ${l.overdue_days} day(s) (${formatCurrency(l.current_fine)})</span>`;
+                } else {
+                    statusBadge = `<span class="badge badge-success">On Schedule</span>`;
+                }
+
+                return `
+                    <tr>
+                        <td><strong>${l.title}</strong></td>
+                        <td>${l.author}</td>
+                        <td><code>${l.isbn}</code></td>
+                        <td>${l.issue_date}</td>
+                        <td><strong>${l.due_date}</strong></td>
+                        <td>${statusBadge}</td>
+                        <td>${l.renewal_count}</td>
+                        <td>
+                            <button class="btn btn-outline btn-sm" onclick="renewLoan(${l.loan_id})">Renew</button>
+                            <button class="btn btn-primary btn-sm" onclick="returnLoan(${l.loan_id})" style="margin-left: 0.25rem;">Return</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function renewLoan(loanId) {
+            hideAlert('loans-alert');
+            const res = await apiCall(`/api/loans/renew/${loanId}`, 'POST');
+            if (!res.ok) {
+                showAlert('loans-alert', res.data.error || 'Failed to renew book.', 'danger');
+                return;
+            }
+
+            showAlert('loans-alert', `${res.data.message} New due date: ${res.data.new_due_date}`, 'success');
+            loadLoans();
+        }
+
+        async function returnLoan(loanId) {
+            hideAlert('loans-alert');
+            const res = await apiCall(`/api/loans/return/${loanId}`, 'POST');
+            if (!res.ok) {
+                showAlert('loans-alert', res.data.error || 'Failed to return book.', 'danger');
+                return;
+            }
+
+            const d = res.data.details;
+            const body = `
+                <div class="alert alert-success" style="margin-bottom: 1rem;">${res.data.message}</div>
+                <table style="width: 100%; border: none;">
+                    <tr><td><strong>Book Title:</strong></td><td>${d.book_title}</td></tr>
+                    <tr><td><strong>Agreed Due Date:</strong></td><td>${d.due_date}</td></tr>
+                    <tr><td><strong>Actual Return Date:</strong></td><td>${d.return_date}</td></tr>
+                    <tr><td><strong>Days Overdue:</strong></td><td>${d.overdue_days} day(s)</td></tr>
+                    <tr><td><strong>Overdue Fine Rate:</strong></td><td>${formatCurrency(d.fine_per_day)} / day</td></tr>
+                    <tr><td><strong>Total Fine:</strong></td><td><strong style="color: ${d.fine_amount > 0 ? 'var(--danger)' : 'var(--success)'}; font-size: 1.1rem;">${formatCurrency(d.fine_amount)}</strong></td></tr>
+                </table>
+            `;
+            document.getElementById('return-details-body').innerHTML = body;
+            document.getElementById('return-modal').classList.add('active');
+
+            loadLoans();
+        }
+
+        function closeReturnModal() {
+            document.getElementById('return-modal').classList.remove('active');
+        }
+
+        initLoansPage();
+    </script>
+</body>
+</html>

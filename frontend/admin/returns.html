@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Process Returns - College Library Admin</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+    <header class="navbar">
+        <div class="nav-brand">
+            <a href="/admin/dashboard">College Library [Admin Panel]</a>
+        </div>
+        <nav class="nav-links">
+            <a href="/admin/dashboard">Dashboard</a>
+            <a href="/admin/books">Books</a>
+            <a href="/admin/members">Members</a>
+            <a href="/admin/issue">Issue Book</a>
+            <a href="/admin/returns" class="active">Returns</a>
+            <a href="/admin/fines">Fines</a>
+            <a href="/admin/transactions">Transactions</a>
+        </nav>
+        <div class="nav-user">
+            <span id="nav-user-name" class="user-badge">Administrator</span>
+            <button class="btn btn-outline btn-sm" onclick="handleLogout()" style="color: #ffffff; border-color: rgba(255,255,255,0.4);">Logout</button>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="card-header" style="margin-bottom: 1.5rem;">
+            <div>
+                <h1>Process Book Returns</h1>
+                <p>Check in returned books, restore available shelf stock, and compute overdue fines.</p>
+            </div>
+            <div>
+                <a href="/admin/issue" class="btn btn-primary">+ Issue Book</a>
+            </div>
+        </div>
+
+        <div id="return-alert" class="alert" style="display: none;"></div>
+
+        <!-- Search Bar -->
+        <div class="card">
+            <div class="search-bar">
+                <input type="text" id="return-search" placeholder="Search by member name, username, or book title...">
+                <button class="btn btn-primary" onclick="loadActiveLoans()">Search</button>
+                <button class="btn btn-outline" onclick="resetReturnSearch()">Reset</button>
+            </div>
+
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Loan ID</th>
+                            <th>Book Title</th>
+                            <th>Member</th>
+                            <th>Issue Date</th>
+                            <th>Due Date</th>
+                            <th>Overdue Status / Fine (₹)</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="returns-tbody">
+                        <tr>
+                            <td colspan="7" style="text-align: center;">Loading active loans...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- Return Details Modal -->
+    <div id="return-modal" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3>Return Processed Successfully</h3>
+                <button class="modal-close" onclick="closeReturnModal()">&times;</button>
+            </div>
+            <div id="return-modal-body" style="font-size: 0.95rem; line-height: 1.8;"></div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="closeReturnModal()">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>College Library Management System &copy; 2026</p>
+    </footer>
+
+    <script src="/js/api.js"></script>
+    <script>
+        async function initReturnsPage() {
+            const admin = await checkAuth('admin');
+            if (!admin) return;
+
+            loadActiveLoans();
+        }
+
+        async function loadActiveLoans() {
+            const search = document.getElementById('return-search').value.trim();
+            const res = await apiCall(`/api/loans/all?status=Issued&search=${encodeURIComponent(search)}`);
+            const tbody = document.getElementById('returns-tbody');
+
+            if (!res.ok || !res.data.transactions || res.data.transactions.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">No active issued loans found. All books are accounted for.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = res.data.transactions.map(l => {
+                const statusBadge = l.is_overdue
+                    ? `<span class="badge badge-danger">Overdue (${l.overdue_days} days) - Fine: ${formatCurrency(l.fine_amount)}</span>`
+                    : `<span class="badge badge-success">On Schedule</span>`;
+
+                return `
+                    <tr>
+                        <td>#${l.loan_id}</td>
+                        <td><strong>${l.book_title}</strong><br><small style="color:var(--text-muted);">ISBN: ${l.isbn}</small></td>
+                        <td>${l.member_name} (<code>${l.member_username}</code>)</td>
+                        <td>${l.issue_date}</td>
+                        <td><strong>${l.due_date}</strong></td>
+                        <td>${statusBadge}</td>
+                        <td>
+                            <button class="btn btn-primary btn-sm" onclick="processReturn(${l.loan_id})">Receive Return</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function resetReturnSearch() {
+            document.getElementById('return-search').value = '';
+            loadActiveLoans();
+        }
+
+        async function processReturn(loanId) {
+            hideAlert('return-alert');
+            const res = await apiCall(`/api/loans/return/${loanId}`, 'POST');
+            if (!res.ok) {
+                showAlert('return-alert', res.data.error || 'Failed to process return.', 'danger');
+                return;
+            }
+
+            const d = res.data.details;
+            const body = `
+                <div class="alert alert-success" style="margin-bottom: 1rem;">${res.data.message}</div>
+                <table style="width: 100%; font-size: 0.95rem;">
+                    <tr><td><strong>Book Title:</strong></td><td>${d.book_title}</td></tr>
+                    <tr><td><strong>Agreed Due Date:</strong></td><td>${d.due_date}</td></tr>
+                    <tr><td><strong>Actual Return Date:</strong></td><td>${d.return_date}</td></tr>
+                    <tr><td><strong>Days Overdue:</strong></td><td>${d.overdue_days} day(s)</td></tr>
+                    <tr><td><strong>Daily Fine Rate:</strong></td><td>${formatCurrency(d.fine_per_day)} / day</td></tr>
+                    <tr><td><strong>Calculated Fine:</strong></td><td><strong style="color: ${d.fine_amount > 0 ? 'var(--danger)' : 'var(--success)'}; font-size: 1.15rem;">${formatCurrency(d.fine_amount)}</strong></td></tr>
+                    <tr><td><strong>Fine Status:</strong></td><td>${d.fine_paid ? '<span class="badge badge-success">No Fine Incurred</span>' : '<span class="badge badge-danger">Unpaid Fine</span>'}</td></tr>
+                </table>
+            `;
+            document.getElementById('return-modal-body').innerHTML = body;
+            document.getElementById('return-modal').classList.add('active');
+
+            loadActiveLoans();
+        }
+
+        function closeReturnModal() {
+            document.getElementById('return-modal').classList.remove('active');
+        }
+
+        document.getElementById('return-search').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') loadActiveLoans();
+        });
+
+        initReturnsPage();
+    </script>
+</body>
+</html>

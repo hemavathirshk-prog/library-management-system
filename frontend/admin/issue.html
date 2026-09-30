@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Issue Book - College Library Admin</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+    <header class="navbar">
+        <div class="nav-brand">
+            <a href="/admin/dashboard">College Library [Admin Panel]</a>
+        </div>
+        <nav class="nav-links">
+            <a href="/admin/dashboard">Dashboard</a>
+            <a href="/admin/books">Books</a>
+            <a href="/admin/members">Members</a>
+            <a href="/admin/issue" class="active">Issue Book</a>
+            <a href="/admin/returns">Returns</a>
+            <a href="/admin/fines">Fines</a>
+            <a href="/admin/transactions">Transactions</a>
+        </nav>
+        <div class="nav-user">
+            <span id="nav-user-name" class="user-badge">Administrator</span>
+            <button class="btn btn-outline btn-sm" onclick="handleLogout()" style="color: #ffffff; border-color: rgba(255,255,255,0.4);">Logout</button>
+        </div>
+    </header>
+
+    <main class="container" style="max-width: 700px;">
+        <div class="card-header" style="margin-bottom: 1.5rem;">
+            <div>
+                <h1>Issue Book to Member</h1>
+                <p>Register a new book loan for a verified student or faculty member.</p>
+            </div>
+            <div>
+                <a href="/admin/returns" class="btn btn-outline">Process Return</a>
+            </div>
+        </div>
+
+        <div id="issue-alert" class="alert" style="display: none;"></div>
+
+        <div class="card">
+            <form id="issue-form">
+                <!-- Member Selection -->
+                <div class="form-group">
+                    <label for="member-select">Select Registered Member *</label>
+                    <select id="member-select" class="form-control" required>
+                        <option value="">-- Choose Member --</option>
+                    </select>
+                </div>
+
+                <!-- Book Selection -->
+                <div class="form-group">
+                    <label for="book-select">Select Book to Issue *</label>
+                    <select id="book-select" class="form-control" required onchange="handleBookChange()">
+                        <option value="">-- Choose Available Book --</option>
+                    </select>
+                </div>
+
+                <!-- Dynamic Preview -->
+                <div id="issue-preview" class="card" style="background: #f8fafc; border: 1px dashed var(--border-color); display: none; margin-top: 1rem;">
+                    <h4 style="margin-bottom: 0.5rem;">Loan Preview</h4>
+                    <p style="margin-bottom: 0.25rem;">• <strong>Selected Book:</strong> <span id="prev-book"></span></p>
+                    <p style="margin-bottom: 0.25rem;">• <strong>Issue Date:</strong> <span id="prev-issue-date">Today</span></p>
+                    <p style="margin-bottom: 0.25rem;">• <strong>Calculated Due Date:</strong> <span id="prev-due-date" style="font-weight: bold; color: var(--primary);"></span></p>
+                    <p style="margin-bottom: 0; font-size: 0.85rem; color: var(--text-muted);">(Calculated using standard library loan period from MySQL settings)</p>
+                </div>
+
+                <div style="margin-top: 1.5rem;">
+                    <button type="submit" id="issue-btn" class="btn btn-primary" style="width: 100%;">Confirm &amp; Issue Book</button>
+                </div>
+            </form>
+        </div>
+    </main>
+
+    <footer>
+        <p>College Library Management System &copy; 2026</p>
+    </footer>
+
+    <script src="/js/api.js"></script>
+    <script>
+        let availableBooks = [];
+        let systemSettings = null;
+
+        async function initIssuePage() {
+            const admin = await checkAuth('admin');
+            if (!admin) return;
+
+            // Load settings
+            const sRes = await apiCall('/api/settings');
+            if (sRes.ok) systemSettings = sRes.data.settings;
+
+            // Load members
+            loadMembersDropdown();
+            // Load available books
+            loadBooksDropdown();
+        }
+
+        async function loadMembersDropdown() {
+            const res = await apiCall('/api/members');
+            const select = document.getElementById('member-select');
+            if (res.ok && res.data.members) {
+                res.data.members.forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = m.member_id;
+                    opt.innerText = `${m.name} (${m.username}) - ${m.email}`;
+                    select.appendChild(opt);
+                });
+            }
+        }
+
+        async function loadBooksDropdown() {
+            const res = await apiCall('/api/books?status=Available');
+            const select = document.getElementById('book-select');
+            if (res.ok && res.data.books) {
+                availableBooks = res.data.books.filter(b => b.available_quantity > 0);
+                availableBooks.forEach(b => {
+                    const opt = document.createElement('option');
+                    opt.value = b.book_id;
+                    opt.innerText = `${b.title} [${b.isbn}] - Available: ${b.available_quantity}`;
+                    select.appendChild(opt);
+                });
+            }
+        }
+
+        function handleBookChange() {
+            const bookId = parseInt(document.getElementById('book-select').value);
+            const preview = document.getElementById('issue-preview');
+
+            if (!bookId) {
+                preview.style.display = 'none';
+                return;
+            }
+
+            const book = availableBooks.find(b => b.book_id === bookId);
+            if (!book) return;
+
+            document.getElementById('prev-book').innerText = `${book.title} (by ${book.author})`;
+
+            const today = new Date();
+            const loanDays = systemSettings ? systemSettings.loan_days : 14;
+            const dueDate = new Date();
+            dueDate.setDate(today.getDate() + loanDays);
+
+            document.getElementById('prev-issue-date').innerText = today.toISOString().split('T')[0];
+            document.getElementById('prev-due-date').innerText = `${dueDate.toISOString().split('T')[0]} (${loanDays} days from now)`;
+            preview.style.display = 'block';
+        }
+
+        document.getElementById('issue-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            hideAlert('issue-alert');
+
+            const memberId = document.getElementById('member-select').value;
+            const bookId = document.getElementById('book-select').value;
+            const btn = document.getElementById('issue-btn');
+
+            if (!memberId || !bookId) {
+                showAlert('issue-alert', 'Please select both a member and a book.', 'danger');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerText = 'Processing...';
+
+            const res = await apiCall('/api/loans/issue', 'POST', {
+                member_id: parseInt(memberId),
+                book_id: parseInt(bookId)
+            });
+
+            btn.disabled = false;
+            btn.innerText = 'Confirm & Issue Book';
+
+            if (!res.ok) {
+                showAlert('issue-alert', res.data.error || 'Failed to issue book.', 'danger');
+                return;
+            }
+
+            showAlert('issue-alert', `${res.data.message} Due Date: ${res.data.due_date}`, 'success');
+            document.getElementById('issue-form').reset();
+            document.getElementById('issue-preview').style.display = 'none';
+
+            // Refresh available books dropdown
+            document.getElementById('book-select').innerHTML = '<option value="">-- Choose Available Book --</option>';
+            loadBooksDropdown();
+        });
+
+        initIssuePage();
+    </script>
+</body>
+</html>

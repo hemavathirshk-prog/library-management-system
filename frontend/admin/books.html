@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Books Management - College Library Admin</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+    <header class="navbar">
+        <div class="nav-brand">
+            <a href="/admin/dashboard">College Library [Admin Panel]</a>
+        </div>
+        <nav class="nav-links">
+            <a href="/admin/dashboard">Dashboard</a>
+            <a href="/admin/books" class="active">Books</a>
+            <a href="/admin/members">Members</a>
+            <a href="/admin/issue">Issue Book</a>
+            <a href="/admin/returns">Returns</a>
+            <a href="/admin/fines">Fines</a>
+            <a href="/admin/transactions">Transactions</a>
+        </nav>
+        <div class="nav-user">
+            <span id="nav-user-name" class="user-badge">Administrator</span>
+            <button class="btn btn-outline btn-sm" onclick="handleLogout()" style="color: #ffffff; border-color: rgba(255,255,255,0.4);">Logout</button>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="card-header" style="margin-bottom: 1.5rem;">
+            <div>
+                <h1>Books Inventory Management</h1>
+                <p>Add new titles, update existing copies, and inspect availability status.</p>
+            </div>
+            <div>
+                <button class="btn btn-primary" onclick="openAddModal()">+ Add New Book</button>
+            </div>
+        </div>
+
+        <div id="books-alert" class="alert" style="display: none;"></div>
+
+        <!-- Search and Filter Bar -->
+        <div class="card">
+            <div class="search-bar">
+                <input type="text" id="search-input" placeholder="Search by title, author, category, or ISBN...">
+                <select id="status-filter" onchange="loadBooks()">
+                    <option value="all">All Books</option>
+                    <option value="Available">Available Books Only</option>
+                    <option value="Unavailable">Unavailable / Out of Stock</option>
+                </select>
+                <button class="btn btn-primary" onclick="loadBooks()">Search</button>
+                <button class="btn btn-outline" onclick="resetFilters()">Reset</button>
+            </div>
+
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Title</th>
+                            <th>Author</th>
+                            <th>Category</th>
+                            <th>ISBN</th>
+                            <th>Publisher</th>
+                            <th>Total</th>
+                            <th>Avail</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="books-tbody">
+                        <tr>
+                            <td colspan="10" style="text-align: center;">Loading books inventory...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- Add/Edit Book Modal -->
+    <div id="book-modal" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3 id="modal-title">Add New Book</h3>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+
+            <div id="modal-alert" class="alert" style="display: none;"></div>
+
+            <form id="book-form">
+                <input type="hidden" id="book-id">
+                
+                <div class="form-group">
+                    <label for="book-title">Book Title *</label>
+                    <input type="text" id="book-title" class="form-control" required placeholder="e.g. Introduction to Algorithms">
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="book-author">Author *</label>
+                        <input type="text" id="book-author" class="form-control" required placeholder="e.g. Thomas H. Cormen">
+                    </div>
+                    <div class="form-group">
+                        <label for="book-category">Category *</label>
+                        <input type="text" id="book-category" class="form-control" required placeholder="e.g. Computer Science">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="book-isbn">ISBN *</label>
+                        <input type="text" id="book-isbn" class="form-control" required placeholder="e.g. 978-0262033848">
+                    </div>
+                    <div class="form-group">
+                        <label for="book-publisher">Publisher *</label>
+                        <input type="text" id="book-publisher" class="form-control" required placeholder="e.g. MIT Press">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="book-quantity">Total Quantity (Copies) *</label>
+                    <input type="number" id="book-quantity" class="form-control" min="1" required value="1">
+                    <small id="quantity-hint" style="color: var(--text-muted); font-size: 0.8rem;"></small>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="submit" id="save-book-btn" class="btn btn-primary">Save Book</button>
+                    <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <footer>
+        <p>College Library Management System &copy; 2026</p>
+    </footer>
+
+    <script src="/js/api.js"></script>
+    <script>
+        let booksList = [];
+
+        async function initBooksPage() {
+            const admin = await checkAuth('admin');
+            if (!admin) return;
+
+            const filterDropdown = document.getElementById('status-filter');
+            if (filterDropdown) {
+                filterDropdown.addEventListener('change', loadBooks);
+            }
+
+            loadBooks();
+        }
+
+        async function loadBooks() {
+            const search = document.getElementById('search-input').value.trim();
+            const status = document.getElementById('status-filter').value;
+
+            let url = `/api/books?search=${encodeURIComponent(search)}&status=${encodeURIComponent(status)}`;
+            const res = await apiCall(url);
+            const tbody = document.getElementById('books-tbody');
+
+            if (!res.ok || !res.data.books || res.data.books.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; color: var(--text-muted); padding: 2rem;">No books found.</td></tr>`;
+                return;
+            }
+
+            booksList = res.data.books;
+            tbody.innerHTML = booksList.map(b => {
+                const badge = b.status === 'Available'
+                    ? `<span class="badge badge-success">Available</span>`
+                    : `<span class="badge badge-danger">Unavailable</span>`;
+
+                return `
+                    <tr>
+                        <td>#${b.book_id}</td>
+                        <td><strong>${b.title}</strong></td>
+                        <td>${b.author}</td>
+                        <td>${b.category}</td>
+                        <td><code>${b.isbn}</code></td>
+                        <td>${b.publisher}</td>
+                        <td>${b.quantity}</td>
+                        <td><strong>${b.available_quantity}</strong></td>
+                        <td>${badge}</td>
+                        <td>
+                            <button class="btn btn-outline btn-sm" onclick="openEditModal(${b.book_id})">Edit</button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteBook(${b.book_id}, '${b.title.replace(/'/g, "\\'")}')" style="margin-left: 0.25rem;">Delete</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function resetFilters() {
+            document.getElementById('search-input').value = '';
+            document.getElementById('status-filter').value = 'all';
+            loadBooks();
+        }
+
+        function openAddModal() {
+            hideAlert('modal-alert');
+            document.getElementById('book-form').reset();
+            document.getElementById('book-id').value = '';
+            document.getElementById('modal-title').innerText = 'Add New Book';
+            document.getElementById('quantity-hint').innerText = '';
+            document.getElementById('book-modal').classList.add('active');
+        }
+
+        function openEditModal(bookId) {
+            hideAlert('modal-alert');
+            const b = booksList.find(item => item.book_id === bookId);
+            if (!b) return;
+
+            document.getElementById('book-id').value = b.book_id;
+            document.getElementById('book-title').value = b.title;
+            document.getElementById('book-author').value = b.author;
+            document.getElementById('book-category').value = b.category;
+            document.getElementById('book-isbn').value = b.isbn;
+            document.getElementById('book-publisher').value = b.publisher;
+            document.getElementById('book-quantity').value = b.quantity;
+
+            const issuedCopies = b.quantity - b.available_quantity;
+            document.getElementById('quantity-hint').innerText = `Current borrowed copies: ${issuedCopies}. Total copies cannot be less than ${issuedCopies}.`;
+
+            document.getElementById('modal-title').innerText = 'Edit Book Details';
+            document.getElementById('book-modal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('book-modal').classList.remove('active');
+        }
+
+        document.getElementById('book-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            hideAlert('modal-alert');
+
+            const bookId = document.getElementById('book-id').value;
+            const title = document.getElementById('book-title').value.trim();
+            const author = document.getElementById('book-author').value.trim();
+            const category = document.getElementById('book-category').value.trim();
+            const isbn = document.getElementById('book-isbn').value.trim();
+            const publisher = document.getElementById('book-publisher').value.trim();
+            const quantity = parseInt(document.getElementById('book-quantity').value);
+
+            const payload = { title, author, category, isbn, publisher, quantity };
+            const isEdit = Boolean(bookId);
+            const endpoint = isEdit ? `/api/books/${bookId}` : '/api/books';
+            const method = isEdit ? 'PUT' : 'POST';
+
+            const res = await apiCall(endpoint, method, payload);
+            if (!res.ok) {
+                showAlert('modal-alert', res.data.error || 'Failed to save book.', 'danger');
+                return;
+            }
+
+            closeModal();
+            showAlert('books-alert', res.data.message || 'Book saved successfully.', 'success');
+            loadBooks();
+        });
+
+        async function deleteBook(bookId, title) {
+            if (!confirm(`Are you sure you want to delete "${title}"?`)) {
+                return;
+            }
+
+            hideAlert('books-alert');
+            const res = await apiCall(`/api/books/${bookId}`, 'DELETE');
+            if (!res.ok) {
+                showAlert('books-alert', res.data.error || 'Failed to delete book.', 'danger');
+                return;
+            }
+
+            showAlert('books-alert', res.data.message || 'Book deleted successfully.', 'success');
+            loadBooks();
+        }
+
+        document.getElementById('search-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') loadBooks();
+        });
+
+        initBooksPage();
+    </script>
+</body>
+</html>

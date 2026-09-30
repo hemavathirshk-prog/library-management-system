@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Member Registration - College Library Management System</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+    <header class="navbar">
+        <div class="nav-brand">
+            <a href="/">College Library</a>
+        </div>
+        <nav class="nav-links">
+            <a href="/">Home</a>
+            <a href="/login">Login</a>
+            <a href="/register" class="active">Member Registration</a>
+        </nav>
+    </header>
+
+    <main class="container" style="max-width: 520px; margin-top: 2rem;">
+        <div class="card">
+            <div class="card-header">
+                <h1 class="card-title" style="font-size: 1.4rem;">New Member Registration</h1>
+            </div>
+
+            <div id="register-alert" class="alert" style="display: none;"></div>
+
+            <form id="register-form">
+                <div class="form-group">
+                    <label for="name">Full Name *</label>
+                    <input type="text" id="name" class="form-control" placeholder="e.g. Jane Doe" required autofocus>
+                </div>
+
+                <div class="form-group">
+                    <label for="email">College Email Address *</label>
+                    <input type="email" id="email" class="form-control" placeholder="e.g. jane.doe@college.edu" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="phone">Phone Number *</label>
+                    <input type="tel" id="phone" class="form-control" placeholder="e.g. 9876543210" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="username">Username *</label>
+                    <input type="text" id="username" class="form-control" placeholder="Choose a unique username" required autocomplete="username">
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Password (minimum 6 characters) *</label>
+                    <input type="password" id="password" class="form-control" placeholder="Enter secure password" required autocomplete="new-password">
+                </div>
+
+                <div class="form-group">
+                    <label for="confirm-password">Confirm Password *</label>
+                    <input type="password" id="confirm-password" class="form-control" placeholder="Re-enter secure password" required autocomplete="new-password">
+                </div>
+
+                <button type="submit" id="reg-btn" class="btn btn-primary" style="width: 100%; margin-top: 0.5rem;">Register Account</button>
+            </form>
+
+            <div style="margin-top: 1.25rem; font-size: 0.9rem; text-align: center;">
+                <p>Already have an account? <a href="/login">Login here</a></p>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <p>College Library Management System &copy; 2026</p>
+    </footer>
+
+    <script src="/js/api.js"></script>
+    <script>
+        document.getElementById('register-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            hideAlert('register-alert');
+
+            const name = document.getElementById('name').value.trim();
+            const email = document.getElementById('email').value.trim();
+            const phone = document.getElementById('phone').value.trim();
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirm-password').value;
+            const btn = document.getElementById('reg-btn');
+
+            if (!name || !email || !phone || !username || !password || !confirmPassword) {
+                showAlert('register-alert', 'Please fill in all fields.', 'danger');
+                return;
+            }
+
+            if (password !== confirmPassword) {
+                showAlert('register-alert', 'Passwords do not match.', 'danger');
+                return;
+            }
+
+            if (password.length < 6) {
+                showAlert('register-alert', 'Password must be at least 6 characters.', 'danger');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerText = 'Registering...';
+
+            const res = await apiCall('/api/auth/register', 'POST', {
+                name, email, phone, username, password, confirm_password: confirmPassword
+            });
+
+            btn.disabled = false;
+            btn.innerText = 'Register Account';
+
+            if (!res.ok) {
+                showAlert('register-alert', res.data.error || 'Registration failed.', 'danger');
+                return;
+            }
+
+            showAlert('register-alert', 'Registration successful! Redirecting to login...', 'success');
+            setTimeout(() => {
+                window.location.href = '/login?msg=Registration successful! Please login with your new account.';
+            }, 1500);
+        });
+    </script>
+</body>
+</html>

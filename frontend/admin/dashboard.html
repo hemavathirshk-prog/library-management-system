@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - College Library</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+    <header class="navbar">
+        <div class="nav-brand">
+            <a href="/admin/dashboard">College Library [Admin Panel]</a>
+        </div>
+        <nav class="nav-links">
+            <a href="/admin/dashboard" class="active">Dashboard</a>
+            <a href="/admin/books">Books</a>
+            <a href="/admin/members">Members</a>
+            <a href="/admin/issue">Issue Book</a>
+            <a href="/admin/returns">Returns</a>
+            <a href="/admin/fines">Fines</a>
+            <a href="/admin/transactions">Transactions</a>
+        </nav>
+        <div class="nav-user">
+            <span id="nav-user-name" class="user-badge">Administrator</span>
+            <button class="btn btn-outline btn-sm" onclick="handleLogout()" style="color: #ffffff; border-color: rgba(255,255,255,0.4);">Logout</button>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="card-header" style="margin-bottom: 1.5rem;">
+            <div>
+                <h1>Librarian Dashboard</h1>
+                <p>Real-time library statistics, book inventory, loan tracking, and overdue administration.</p>
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+                <a href="/admin/issue" class="btn btn-primary">+ Issue Book</a>
+                <a href="/admin/returns" class="btn btn-outline">Process Return</a>
+            </div>
+        </div>
+
+        <!-- 4 Simple Counts Grid as required by prompt -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-title">Total Books</div>
+                <div class="stat-value" id="stat-total-books">0</div>
+                <p style="font-size: 0.8rem; margin: 0.25rem 0 0 0; color: var(--text-muted);"><span id="stat-total-copies">0</span> total physical copies</p>
+            </div>
+            <div class="stat-card">
+                <div class="stat-title">Registered Members</div>
+                <div class="stat-value" id="stat-total-members">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-title">Currently Issued Books</div>
+                <div class="stat-value" id="stat-total-issued" style="color: var(--primary);">0</div>
+            </div>
+            <div class="stat-card alert-top">
+                <div class="stat-title">Overdue Books</div>
+                <div class="stat-value" id="stat-total-overdue" style="color: var(--danger);">0</div>
+            </div>
+        </div>
+
+        <!-- Secondary row: Pending Fines & Quick Actions -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 1.5rem;">
+            <div class="card" style="margin-bottom: 0;">
+                <h3 style="margin-bottom: 0.75rem;">Quick Management Actions</h3>
+                <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                    <a href="/admin/books" class="btn btn-outline" style="justify-content: flex-start;">📚 Add or Edit Book Catalog</a>
+                    <a href="/admin/members" class="btn btn-outline" style="justify-content: flex-start;">👥 Manage Registered Members</a>
+                    <a href="/admin/issue" class="btn btn-outline" style="justify-content: flex-start;">📤 Issue a Book to Member</a>
+                    <a href="/admin/returns" class="btn btn-outline" style="justify-content: flex-start;">📥 Process Book Returns &amp; Fines</a>
+                    <a href="/admin/fines" class="btn btn-outline" style="justify-content: flex-start;">💰 View Unpaid Fines (<span id="quick-unpaid">₹0.00</span>)</a>
+                </div>
+            </div>
+
+            <div class="card" style="margin-bottom: 0; background: #f8fafc;">
+                <div class="card-header">
+                    <h3 style="margin: 0;">System Configuration</h3>
+                    <span class="badge badge-info">Active Database Rules</span>
+                </div>
+                <div id="settings-summary" style="font-size: 0.9rem; line-height: 2;">
+                    Loading system settings...
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Issued Loans Table -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Recent Active Loans</h2>
+                <a href="/admin/transactions" class="btn btn-outline btn-sm">All Transactions</a>
+            </div>
+
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Loan ID</th>
+                            <th>Book Title</th>
+                            <th>Member</th>
+                            <th>Issue Date</th>
+                            <th>Due Date</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recent-loans-tbody">
+                        <tr>
+                            <td colspan="7" style="text-align: center;">Loading active loans...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <p>College Library Management System &copy; 2026</p>
+    </footer>
+
+    <script src="/js/api.js"></script>
+    <script>
+        async function initAdminDashboard() {
+            const admin = await checkAuth('admin');
+            if (!admin) return;
+
+            // Load counts
+            const res = await apiCall('/api/admin/dashboard-stats');
+            if (res.ok) {
+                const s = res.data;
+                document.getElementById('stat-total-books').innerText = s.total_books;
+                document.getElementById('stat-total-copies').innerText = s.total_copies;
+                document.getElementById('stat-total-members').innerText = s.total_members;
+                document.getElementById('stat-total-issued').innerText = s.total_issued;
+                document.getElementById('stat-total-overdue').innerText = s.total_overdue;
+                document.getElementById('quick-unpaid').innerText = formatCurrency(s.total_unpaid_fines);
+            }
+
+            // Load Settings
+            const setRes = await apiCall('/api/settings');
+            if (setRes.ok && setRes.data.settings) {
+                const cfg = setRes.data.settings;
+                document.getElementById('settings-summary').innerHTML = `
+                    <p style="margin-bottom: 0.25rem;">• Standard Borrowing Period: <strong>${cfg.loan_days} Days</strong></p>
+                    <p style="margin-bottom: 0.25rem;">• Daily Overdue Fine Rate: <strong>${formatCurrency(cfg.fine_per_day)} / Day</strong></p>
+                    <p style="margin-bottom: 0.25rem;">• Maximum Allowed Renewals: <strong>${cfg.max_renewals} Times</strong></p>
+                    <p style="margin-bottom: 0; font-size: 0.8rem; color: var(--text-muted);">(Read dynamically from MySQL settings table)</p>
+                `;
+            }
+
+            // Load Recent Active Loans
+            loadRecentLoans();
+        }
+
+        async function loadRecentLoans() {
+            const res = await apiCall('/api/loans/all?status=Issued');
+            const tbody = document.getElementById('recent-loans-tbody');
+
+            if (!res.ok || !res.data.transactions || res.data.transactions.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No active issued loans.</td></tr>`;
+                return;
+            }
+
+            const loans = res.data.transactions.slice(0, 8);
+            tbody.innerHTML = loans.map(l => {
+                const statusBadge = l.is_overdue
+                    ? `<span class="badge badge-danger">Overdue by ${l.overdue_days}d (${formatCurrency(l.fine_amount)})</span>`
+                    : `<span class="badge badge-success">Issued (On Time)</span>`;
+
+                return `
+                    <tr>
+                        <td>#${l.loan_id}</td>
+                        <td><strong>${l.book_title}</strong></td>
+                        <td>${l.member_name} (<code>${l.member_username}</code>)</td>
+                        <td>${l.issue_date}</td>
+                        <td><strong>${l.due_date}</strong></td>
+                        <td>${statusBadge}</td>
+                        <td>
+                            <a href="/admin/returns" class="btn btn-primary btn-sm">Process Return</a>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        initAdminDashboard();
+    </script>
+</body>
+</html>

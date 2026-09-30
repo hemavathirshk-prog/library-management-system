@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Search &amp; Borrow Books - College Library</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+    <header class="navbar">
+        <div class="nav-brand">
+            <a href="/member/dashboard">College Library</a>
+        </div>
+        <nav class="nav-links">
+            <a href="/member/dashboard">Dashboard</a>
+            <a href="/member/books" class="active">Search &amp; Borrow</a>
+            <a href="/member/loans">My Borrowed Books</a>
+            <a href="/member/history">Borrowing History</a>
+            <a href="/member/fines">Fine Details</a>
+        </nav>
+        <div class="nav-user">
+            <span id="nav-user-name" class="user-badge">Member</span>
+            <button class="btn btn-outline btn-sm" onclick="handleLogout()" style="color: #ffffff; border-color: rgba(255,255,255,0.4);">Logout</button>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="card-header" style="margin-bottom: 1.5rem;">
+            <div>
+                <h1>Search &amp; Borrow Books</h1>
+                <p>Browse available titles in the college collection and borrow them directly to your account.</p>
+            </div>
+            <div>
+                <a href="/member/loans" class="btn btn-outline">My Borrowed Books</a>
+            </div>
+        </div>
+
+        <div id="books-alert" class="alert" style="display: none;"></div>
+
+        <!-- Search and Filter Bar -->
+        <div class="card">
+            <div class="search-bar">
+                <input type="text" id="search-input" placeholder="Search by title, author, or ISBN...">
+                <select id="category-filter" onchange="loadBooks()">
+                    <option value="all">All Categories</option>
+                </select>
+                <select id="status-filter" onchange="loadBooks()">
+                    <option value="all">All Statuses</option>
+                    <option value="Available" selected>Available Only</option>
+                    <option value="Unavailable">Unavailable Only</option>
+                </select>
+                <button class="btn btn-primary" onclick="loadBooks()">Search</button>
+                <button class="btn btn-outline" onclick="resetFilters()">Reset</button>
+            </div>
+
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Title</th>
+                            <th>Author</th>
+                            <th>Category</th>
+                            <th>ISBN</th>
+                            <th>Available</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="books-tbody">
+                        <tr>
+                            <td colspan="7" style="text-align: center;">Loading books...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- Book Details Modal -->
+    <div id="book-modal" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3 id="modal-book-title">Book Details</h3>
+                <button class="modal-close" onclick="closeBookModal()">&times;</button>
+            </div>
+            <div id="modal-book-body" style="font-size: 0.95rem; line-height: 1.8;"></div>
+            <div class="modal-footer">
+                <button id="modal-borrow-btn" class="btn btn-primary">Borrow Book</button>
+                <button class="btn btn-outline" onclick="closeBookModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>College Library Management System &copy; 2026</p>
+    </footer>
+
+    <script src="/js/api.js"></script>
+    <script>
+        let allBooks = [];
+
+        async function initPage() {
+            const user = await checkAuth('member');
+            if (!user) return;
+
+            loadCategories();
+            loadBooks();
+        }
+
+        async function loadCategories() {
+            const res = await apiCall('/api/books/categories');
+            if (res.ok && res.data.categories) {
+                const select = document.getElementById('category-filter');
+                res.data.categories.forEach(cat => {
+                    const opt = document.createElement('option');
+                    opt.value = cat;
+                    opt.innerText = cat;
+                    select.appendChild(opt);
+                });
+            }
+        }
+
+        async function loadBooks() {
+            const search = document.getElementById('search-input').value.trim();
+            const category = document.getElementById('category-filter').value;
+            const status = document.getElementById('status-filter').value;
+
+            let url = `/api/books?search=${encodeURIComponent(search)}&category=${encodeURIComponent(category)}&status=${encodeURIComponent(status)}`;
+            const res = await apiCall(url);
+            const tbody = document.getElementById('books-tbody');
+
+            if (!res.ok || !res.data.books || res.data.books.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No books found.</td></tr>`;
+                return;
+            }
+
+            allBooks = res.data.books;
+            tbody.innerHTML = allBooks.map(b => {
+                const isAvail = b.status === 'Available' && b.available_quantity > 0;
+                const badge = isAvail 
+                    ? `<span class="badge badge-success">Available</span>` 
+                    : `<span class="badge badge-danger">Unavailable</span>`;
+
+                const borrowBtn = isAvail
+                    ? `<button class="btn btn-primary btn-sm" onclick="borrowBook(${b.book_id})">Borrow</button>`
+                    : `<button class="btn btn-outline btn-sm" disabled style="opacity: 0.6; cursor: not-allowed;">Unavailable</button>`;
+
+                return `
+                    <tr>
+                        <td><strong><a href="javascript:void(0)" onclick="viewDetails(${b.book_id})">${b.title}</a></strong></td>
+                        <td>${b.author}</td>
+                        <td>${b.category}</td>
+                        <td><code>${b.isbn}</code></td>
+                        <td>${b.available_quantity} / ${b.quantity}</td>
+                        <td>${badge}</td>
+                        <td>
+                            ${borrowBtn}
+                            <button class="btn btn-outline btn-sm" onclick="viewDetails(${b.book_id})" style="margin-left: 0.25rem;">Details</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function resetFilters() {
+            document.getElementById('search-input').value = '';
+            document.getElementById('category-filter').value = 'all';
+            document.getElementById('status-filter').value = 'all';
+            loadBooks();
+        }
+
+        async function borrowBook(bookId) {
+            hideAlert('books-alert');
+            const res = await apiCall('/api/loans/issue', 'POST', { book_id: bookId });
+            if (!res.ok) {
+                showAlert('books-alert', res.data.error || 'Failed to borrow book.', 'danger');
+                return;
+            }
+
+            showAlert('books-alert', `${res.data.message} Due Date: ${res.data.due_date}`, 'success');
+            loadBooks();
+        }
+
+        function viewDetails(bookId) {
+            const b = allBooks.find(item => item.book_id === bookId);
+            if (!b) return;
+
+            document.getElementById('modal-book-title').innerText = b.title;
+            document.getElementById('modal-book-body').innerHTML = `
+                <p><strong>Author:</strong> ${b.author}</p>
+                <p><strong>Category:</strong> ${b.category}</p>
+                <p><strong>ISBN:</strong> <code>${b.isbn}</code></p>
+                <p><strong>Publisher:</strong> ${b.publisher}</p>
+                <p><strong>Total Copies in Library:</strong> ${b.quantity}</p>
+                <p><strong>Available Copies:</strong> ${b.available_quantity}</p>
+                <p><strong>Status:</strong> <span class="badge ${b.status === 'Available' ? 'badge-success' : 'badge-danger'}">${b.status}</span></p>
+            `;
+
+            const borrowBtn = document.getElementById('modal-borrow-btn');
+            if (b.status === 'Available' && b.available_quantity > 0) {
+                borrowBtn.style.display = 'inline-block';
+                borrowBtn.onclick = function() {
+                    closeBookModal();
+                    borrowBook(b.book_id);
+                };
+            } else {
+                borrowBtn.style.display = 'none';
+            }
+
+            document.getElementById('book-modal').classList.add('active');
+        }
+
+        function closeBookModal() {
+            document.getElementById('book-modal').classList.remove('active');
+        }
+
+        document.getElementById('search-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') loadBooks();
+        });
+
+        initPage();
+    </script>
+</body>
+</html>
