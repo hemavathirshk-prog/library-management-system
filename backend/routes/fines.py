@@ -1,8 +1,7 @@
 from datetime import date
 from flask import Blueprint, request, jsonify, session
-from database import execute_query, get_system_settings
-from routes.auth import login_required
-
+from backend.database import execute_query, get_system_settings
+from backend.routes.auth import login_required
 fines_bp = Blueprint('fines', __name__)
 
 @fines_bp.route('/member', methods=['GET'])

@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
-from database import execute_query
-from routes.auth import login_required
+from backend.database import execute_query
+from backend.routes.auth import login_required
 
 books_bp = Blueprint('books', __name__)
 

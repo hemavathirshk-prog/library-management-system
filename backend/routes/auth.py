@@ -1,7 +1,7 @@
 from functools import wraps
 from flask import Blueprint, request, jsonify, session
 from werkzeug.security import generate_password_hash, check_password_hash
-from database import execute_query
+from backend.database import execute_query
 
 auth_bp = Blueprint('auth', __name__)
 

@@ -2,12 +2,12 @@ import os
 from datetime import date
 from flask import Flask, send_from_directory, jsonify, session, redirect, url_for, request
 from backend.config import Config
-from database import execute_query, get_system_settings
-from routes.auth import auth_bp, login_required
-from routes.books import books_bp
-from routes.members import members_bp
-from routes.loans import loans_bp
-from routes.fines import fines_bp
+from backend.database import execute_query, get_system_settings
+from backend.routes.auth import auth_bp, login_required
+from backend.routes.books import books_bp
+from backend.routes.members import members_bp
+from backend.routes.loans import loans_bp
+from backend.routes.fines import fines_bp
 
 # Resolve paths
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))

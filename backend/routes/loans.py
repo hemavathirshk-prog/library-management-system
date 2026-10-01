@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 from flask import Blueprint, request, jsonify, session
-from database import execute_query, get_system_settings
-from routes.auth import login_required
+from backend.database import execute_query, get_system_settings
+from backend.routes.auth import login_required
 
 loans_bp = Blueprint('loans', __name__)
 

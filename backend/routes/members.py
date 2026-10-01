@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, session
 from werkzeug.security import generate_password_hash
-from database import execute_query
-from routes.auth import login_required
+from backend.database import execute_query
+from backend.routes.auth import login_required
 
 members_bp = Blueprint('members', __name__)
 
